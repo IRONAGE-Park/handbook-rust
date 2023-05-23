@@ -1,4 +1,4 @@
-fn connect() {
+pub fn connect() {
     // lib.rs 파일에서 client_out 모듈을 선언하였기 때문에, 이 파일 안에는 mod 선언이 필요 없음
 }
 

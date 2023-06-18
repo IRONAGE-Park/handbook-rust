@@ -10,6 +10,7 @@ fn main() {
     // result::file_open_match_by_unwrap();
     // result::file_open_unwrap();
     // result::file_open_expect();
+    result::read_username_from_file();
 }
 
 mod example;

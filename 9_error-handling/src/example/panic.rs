@@ -1,3 +1,4 @@
+// 9.1 - `panic!`으로 복구 불가능한 에러 처리하기
 pub fn run() {
     panic!("crash and burn");
     // thread 'main' panicked at 'crash and burn', src\example\panic.rs:3:9
@@ -6,6 +7,7 @@ pub fn run() {
     // 에러 메시지를 통해 외부 코드 여부, 누가 작성한 코드인지 등 패닉이 발생한 원인을 파악할 수 있음
 }
 
+// 9.1 - `panic!` 백트레이스 이용하기
 pub fn backtrace() {
     let v = vec![1, 2, 3];
     v[99]; // []의 사용은 어떤 요소의 반환을 가정하지만, 유효하지 않은 인덱스를 넘기게 되면 러스트가 반환할 올바른 요소가 없음

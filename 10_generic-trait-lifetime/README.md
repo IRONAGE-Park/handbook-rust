@@ -162,7 +162,7 @@ enum Result<T, E> {
 
 #### 트레잇 바운드 문법
 
-**트레잇 바운드(trait bound)**는 `impl trait` 문법과 같은 좀더 기다란 형식의 문법적 설탕  
+**트레잇 바운드**(trait bound)는 `impl trait` 문법과 같은 좀더 기다란 형식의 문법적 설탕  
 트레잇 바운드는 아래와 같이 생김
 
 ```rust

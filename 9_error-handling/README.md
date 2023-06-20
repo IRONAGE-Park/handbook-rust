@@ -301,7 +301,6 @@ impl Guess {
         self.value
     }
 }
-
 ```
 
 ### 정리

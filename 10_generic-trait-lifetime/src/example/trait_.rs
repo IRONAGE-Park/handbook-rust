@@ -104,7 +104,7 @@ pub fn notify(item: &impl Summary3) {
 }
 
 // 10.2 - 트레잇을 구현하는 타입을 반환하기
-pub fn returns_summarizable() -> impl Summary3 {
+pub fn returns_summarizable() -> impl Summary {
     // 반환 타입에 구체적 타입명이 아닌 `impl Summary`를 작성하여 트레잇을 구현하는 타입을 반환한다고 명시
     // 이 함수를 호출하는 쪽의 코드에서는 구체적인 타입을 알 필요가 없음
     Tweet {
@@ -116,26 +116,26 @@ pub fn returns_summarizable() -> impl Summary3 {
 }
 // `impl trait` 문법을 쓴다고 해서 다양한 타입을 반환할 수는 없음
 // `impl trait` 문법이 컴파일러 내에 구현된 방식으로 인한 제약 때문에 허용되지 않음
-pub fn returns_summarizable_error() -> impl Summary3 {
-    // if switch {
-    //     NewsArticle {
-    //         headline: String::from("Penguins win the Stanley Cup Championship!"),
-    //         location: String::from("Pittsburgh, PA, USA"),
-    //         author: String::from("Iceburgh"),
-    //         content: String::from(
-    //             "The Pittsburgh Penguins once again are the best \
-    //              hockey team in the NHL.",
-    //         ),
-    //     }
-    // } else {
-    //     Tweet {
-    //         username: String::from("horse_ebooks"),
-    //         content: String::from("of course, as you probably already know, people"),
-    //         reply: false,
-    //         retweet: false,
-    //     }
-    // }
-}
+// pub fn returns_summarizable_error() -> impl Summary3 {
+// if switch {
+//     NewsArticle {
+//         headline: String::from("Penguins win the Stanley Cup Championship!"),
+//         location: String::from("Pittsburgh, PA, USA"),
+//         author: String::from("Iceburgh"),
+//         content: String::from(
+//             "The Pittsburgh Penguins once again are the best \
+//              hockey team in the NHL.",
+//         ),
+//     }
+// } else {
+//     Tweet {
+//         username: String::from("horse_ebooks"),
+//         content: String::from("of course, as you probably already know, people"),
+//         reply: false,
+//         retweet: false,
+//     }
+// }
+// }
 
 // 10.2 - 트레잇 바운드를 사용해 조건부로 메서드 구현하기
 // `Pair<T>` 타입은 언제나 새로운 인스턴스를 반환하는 `new` 함수를 구현함
@@ -154,9 +154,9 @@ impl<T> Pair<T> {
 impl<T: Display + PartialOrd> Pair<T> {
     fn cmp_display(&self) {
         if self.x >= self.y {
-            printf!("The largest member is x = {}", self.x);
+            println!("The largest member is x = {}", self.x);
         } else {
-            printf!("The largest member is y = {}", self.y);
+            println!("The largest member is y = {}", self.y);
         }
     }
 }

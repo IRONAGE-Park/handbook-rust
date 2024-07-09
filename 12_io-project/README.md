@@ -91,3 +91,131 @@ fn main() {
   Searching for test
   In file sample.txt
   ```
+
+## 12.2 파일 읽기
+
+```rust
+// 파일 읽는 코드 작성
+use std::fs;
+
+fn main() {
+  // --생략--
+  let contents = fs.read_to_string(file_path).expect("Should have been abel to read the file");
+
+  println!("With text:\n{contents}");
+}
+```
+
+- 실행 결과
+
+  ```shell
+  $ cargo run -- the poem.txt
+    Finished dev [unoptimized + debuginfo] target(s) in 0.01s
+     Running `target\debug\io-project.exe the poem.txt`
+  Searching for the
+  In file poem.txt
+  With text:
+  I'm nobody! Who are you?
+  Are you nobody, too?
+  Then there's a pair of us - don't tell!
+  They'd banish us, you know.
+
+  How dreary to be somebody!
+  How public, like a frog
+  To tell your name the livelong day
+  To an admiring bog!
+  ```
+
+- 현재 코드의 문제점
+  - 현재 `main` 함수에는 여러가지 기능이 있음
+    - 일반적으로 함수 하나당 단 하나의 아이디어에 대한 기능을 구현할 때 함수가 더 명료해지고 관리하기 쉬워짐
+  - 처리 가능한 수준의 에러 처리를 하고 있지 않음
+    - 작을 땐 문제가 되지 않으나, 커지면 이 문제들을 깔끔하게 고치리 어려워질 것임
+- 작은 양의 코드를 리팩터링하는 것이 훨씬 쉽기 때문에 일찍 리팩터링 하는 것은 좋은 관행
+
+## 12.3 모듈성과 에러 처리 향상을 위한 리팩터링
+
+- 해결해야 할 네 가지 문제점
+
+1. `main` 함수에서 목적 추출 및 분리
+
+- 하나의 함수에 여러 목적이 포함되어 있으면, 함수의 본래 목적 추론, 테스트, 리팩터링이 어려워짐
+
+2. 로직을 위한 변수 구조체로 분리
+
+- 변수가 스코프 내에 여러 개 선언되어 있을 경우, 해당 변수의 역할이 혼란스러울 수 있음
+- 설정 변수들을 하나의 구조체로 묶어서 목적을 분명히 하는 것이 좋음
+
+3. 에러 메시지의 정보 품질 향상
+4. 에러 처리 로직 한 곳에 통합
+
+### 12.3.1 바이너리 프로젝트에 대한 관심사 분리
+
+- `main`이 커지기 시작할 때 바이너리 프로그램의 별도 관심사를 나누기 위한 가이드라인
+  - 프로그램을 `main.rs`와 `lib.rs`로 분리하고 프로그램 로직을 `lib.rs`에 옮기세요.
+  - 커맨드 라인 파싱 로직이 작은 동안에는 `main.rs`에 남아있을 수 있습니다.
+  - 커맨들 라인 파싱 로직이 복잡해지기 시작하면, `main.rs`로부터 추출하여 `lib.rs`로 옮기세요.
+- 이 과정을 거친 후 `main` 함수에 남아있는 책임소재는 다음으로 한정되어야 함
+  - 인수 값을 가지고 커맨드 라인 파싱 로직 호출하기
+  - 그 밖의 설정
+  - `lib.rs`의 `run` 함수 호출
+  - `run`이 에러를 반환할 때 에러 처리하기
+
+#### 인수 파서 추출
+
+```rust
+fn parse_config(args: &[String]) -> (&str, &str) {
+  let query = &args[1];
+  let file_path = &args[2];
+
+  (query, file_path)
+}
+
+```
+
+- `main`은 더이상 커맨드 라인 인수와 변수들이 어떻게 대응되는지를 결정할 책임이 없음
+- 이러한 리팩터링은 조금씩 점진적으로 변해가며, 한 단계를 거칠 때마다 기능이 여전히 동작하는지 검증하면 좋음
+
+#### 설정 값 묶기
+
+```rust
+struct Config {
+  query: String,
+  file_path: String,
+}
+
+fn parse_config(args: &[String]) -> Config {
+  let query = args[1].clone();
+  let file_path = args[2].clone();
+
+  Config { query, file_path }
+}
+```
+
+- 기존에 반환하고 있던 튜플을 바로 개별 부분으로 즉시 쪼개는 것은, 적절한 추상화가 이루어지지 않았다는 신호
+- 하나의 구조체에 넣어 필드에 각각 의미있는 이름을 부여
+- 이 과정에서 필요한 `String` 데이터 관리 방법은 다양하며, 가장 쉬운 방법은 복사본을 만드는 것
+  - 참조자를 지정하는 것에 비해 더 많은 비용을 지불하나, 라이프타임 관리가 필요없어 직관적임
+  - 이러한 환경에서 약간의 성능을 포기하고 단순함을 얻는 것은 가치 있는 절충안
+
+> `clone`을 사용한 절충안
+>
+> 많은 러스트 개발자들이 런타임 비용의 이유로 `clone`을 사용한 소유권 문제 해결을 회피하는 경향  
+> 그러나 처음부터 최적화된 코드 작성을 시도하기보다는 다소 비효율적이더라도 동작하는 프로그램을 만드는 편이 좋음
+
+#### `Config`를 위한 생성자 만들기
+
+- `parse_config` 함수의 목적이 `Config`를 생성하는 것이므로 자연스럽게 `Config`와 연관된 `new`라는 이름의 함수로 바꿀 수 있음
+
+```rust
+impl Config {
+  pub fn new(args: &[String]) -> Self {
+    let query = args[1].clone();
+    let file_path = args[2].clone();
+
+    Config { query, file_path }
+  }
+}
+```
+
+### 12.3.2 에러 처리 수정

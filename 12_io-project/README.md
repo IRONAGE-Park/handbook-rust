@@ -219,3 +219,163 @@ impl Config {
 ```
 
 ### 12.3.2 에러 처리 수정
+
+#### 에러 메시지 개선
+
+- 기존의 에러 메시지는 아래와 같음
+  ```shell
+  thread 'main' panicked at src\main.rs:23:21:
+  index out of bounds: the len is 1 but the index is 1
+  ```
+- 개발자에게 행동을 유도할 수 있는 다른 메시지를 부여함
+  ```rust
+  impl Config {
+    pub fn new(args: &[String]) -> Self {
+      if args.len() < 3 {
+        panic!("not enough arguments");
+      }
+    }
+  }
+  ```
+- 아까보다는 나은 코드가 되었지만, 여전이 개발자에게 필요 없는, `panic!`에 의한 추가적인 정보가 제공
+- `panic!`을 호출하는 것은 사용 방법의 문제가 아니라, 프로그램의 문제에 적합하므로 `Result`를 사용하도록 함
+
+#### `panic!` 호출 대신 `Result` 반환하기
+
+- 일반적으로 `new`라는 생성자는 실패하지 않으리라 예상하기 때문에, 함수 이름을 `build`로 수정
+- `Result` 타입에 에러 메시지를 담아 `panic!`의 호출로 인한 `thread 'main' ... RUST_BACKTRACE`에 대한 텍스트를 제거할 수 있음
+
+```rust
+impl Config {
+  pub fn build(args: &[String]) -> Result<Self, &'static str> {
+    if args.len() < 3 {
+      return Err("not enough arguments");
+    }
+
+    let query = args[1].clone();
+    let file_path = args[2].clone();
+
+    Ok(Config { query, file_path })
+  }
+}
+```
+
+#### `Config::build` 호출과 에러 처리
+
+- `Config::build`를 사용하는 함수 내에서 직접 `Result` 타입에 대한 에러를 처리하고, 에러 발생 시 직접 `0`이 아닌 에러 코드로 종료함
+- `0`이 아닌 종료 상태 값은 프로그램을 호출한 프로세스에게 에러 상태 값과 함께 종료되었음을 알려주는 관례
+
+```rust
+fn main() {
+  let args: Vec<String> = env::args().collect();
+  let config = Config::build(&args).unwrap_or_else(|err| {
+    // `Result`가 `Err`를 반환했을 경우 호출하는 클로저
+    // `panic!`이 아닌 에러 처리를 정의할 수 있음
+    println!("Problem parsing arguments: {err}");
+    std::process::exit(1); // `panic!`과 유사하지만 추가 출력문이 사라짐
+  });
+}
+```
+
+```shell
+Problem parsing arguments: not enough arguments
+```
+
+### 12.3.3 `main`으로부터 로직 추출하기
+
+- 프로그램 로직에서, `main` 함수에 있는 로직 중 설정 값이나 에러 처리와는 관련되지 않은 모든 로직을 `run`이라는 함수로 추출
+  - `main`은 간결하고 검사하기 쉬워짐
+
+```rust
+fn run(config: Config) {
+  let contents =
+    fs::read_to_string(config.file_path).expect("Something went wrong reading the file");
+
+  println!("With text:\n{contents}")
+}
+```
+
+#### `run` 함수로부터 에러 반환하기
+
+- 현재 `run` 함수는 뭔가 잘못되면 `expect`를 호출하여 프로그램이 패닉이 되도록 함
+  - 대신 `Result<T, E>`를 반환하도록 할 수 있음
+
+```rust
+// 트레이트 객체 `Box<dyn std::error::Error>`를 반환
+// -> 이 함수가 `Error` 트레이트를 구현한 어떤 타입을 반환하는데, 그 반환 값이 구체적으로 어떤 타입인지 특정하지 않아도 됨
+// 서로 다른 에러의 경우에서 서로 다른 타입이 될지도 모르는 에러 값을 반환하는 유연성을 제공
+// `dyn` 키워드는 dynamic의 줄임말
+fn run(config: Config) -> Result<(), Box<dyn std::error::Error>> {
+  let contents = fs::read_to_string(config.file_path)?;
+
+  println!("With text:\n{contents}");
+
+  // 원래 `()`를 반환하여 생략 가능했음
+  // `run` 함수의 타입 시그니처는 `()`로 선언되었는데, 유닛 타입 값을 `Ok` 값으로 감쌀 필요가 있음을 의미
+  // `Ok(())` 문법은 이상해보일 수 있지만, 부작용에 대해서만 처리하겠다는 것을 가리키는 자연스러운 방식
+  Ok(())
+}
+```
+
+- 컴파일러가 `main`에서 처리하지 않은 `run` 함수의 반환 `Result`에 대해 경고를 줌
+- `Result` 값이 무시되고 있으며, 어떤 에러 처리가 필요하지 않은지 상기시켜주는 역할
+
+#### `main`에서 `run`으로부터 반환된 에러 처리하기
+
+```rust
+fn main() {
+  if let Err(e) = run(config) {
+    println!("Application error: {e}");
+    std::process::exit(1);
+  }
+}
+```
+
+- `Cargo::build`와 유사한 기술을 통해 에러를 검사하고 처리하는데, `unwrap_or_else` 대신 `if let`을 사용
+- `run` 함수가 반환한 값은 `()`이기 때문에, 실패한 경우만 신경쓰면 되므로 `unwrap_or_else`가 필요 없어짐
+- `if let`과 `unwrap_or_else`는 모두 에러를 출력하고 종료하는 역할
+
+### 12.3.4 라이브러리 크레이트로 코드 쪼개기
+
+- 코드를 쪼개면 테스트하기 용이하고, `main.rs` 파일의 책임 소재를 더 적게할 수 있음
+- 옮길 부분
+  - `run` 함수 정의 부분
+  - 이와 관련된 `use` 구문들
+  - `Config` 정의 부분
+  - `Config::build` 함수 정의 부분
+- `pub` 키워드를 사용하여 외부에서 라이브러리 크레이트에 접근할 수 있도록 함
+- `lib.rs`
+
+  ```rust
+  pub struct Config {
+    pub query: String,
+    pub file_path: String,
+  }
+
+  impl Config {
+    pub fn build(args: &[String]) -> Result<Config, &'static str> {
+      // --생략--
+    }
+  }
+
+  pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
+    // --생략--
+  }
+  ```
+
+- `main.rs`
+
+  ```rust
+  use io_project::Config;
+
+  fn main() {
+    // --생략--
+    if let Err(e) = minigrep::run(config) {
+      // --생략--
+    }
+  }
+  ```
+
+- 이후 테스트를 작성하여 모듈성의 이점을 활용할 수 있음
+
+## 12.4 테스트 주도 개발로 라이브러리 기능 개발하기

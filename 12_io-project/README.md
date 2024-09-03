@@ -379,3 +379,321 @@ fn main() {
 - 이후 테스트를 작성하여 모듈성의 이점을 활용할 수 있음
 
 ## 12.4 테스트 주도 개발로 라이브러리 기능 개발하기
+
+- 테스트 주도 개발(Test-Driven Development, TDD) 프로세스
+  1. 실패하는 테스트를 작성하고 실행하여, 예상한 이유대로 실패하는지 확인
+  2. 새로운 테스트를 통과하기 충분한 정도의 코드만 작성하거나 수정
+  3. 추가하거나 변경한 코드를 리팩터링하고 테스트가 계속 통과하는지 확인
+  4. 1단계로 돌아감
+- 코드를 작성하기 전에 테스트 먼저 작성하는 것은 프로세스 전체에 걸쳐 높은 테스트 범위를 유지하는 데 도움을 줌
+
+### 12.4.1 실패하는 테스트 작성하기
+
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn one_result() {
+        let query = "duct";
+        // 따옴표 옆의 '\'는 이 문자열 리터럴 내용의 앞에 줄 바꿈 문자를 집어넣지 않도록 러스트에게 알려주는 것
+        let contents = "\
+Rust:
+safe, fast, productive.
+Pick three.";
+
+        // search 함수는 질의와 검색할 텍스트를 입력받아 질의 값을 담고 있는 라인들만 반환하는 것
+        // 이 테스트는 문자열 "duct"을 검색함
+        assert_eq!(vec!["safe, fast, productive."], search(query, contents));
+    }
+}
+```
+
+- 위 테스트는 아직 컴파일되지 않으므로 TDD 원칙에 따라서 함수 정의부를 추가하는 것으로 컴파일과 테스트가 동작하기에 딱 충분한 코드만 추가
+
+```rust
+// 이 함수에 의해 반환된 데이터가 함수의 `contents` 인수로 전달된 데이터만큼 오래 살 것이라고 명시
+// * 슬라이스에 의해 참조된 데이터는 그 참조자가 유효한 동안 유효할 필요가 있음
+// * `contents` 대신 `query`의 문자열 슬라이스를 만들고 있다고 가정하면, 안정성 검사는 정확하지 않음
+pub fn search<'a>(query: &str, contents: &'a str) -> Vec<&'a str> {
+    vec![]
+}
+```
+
+- 라이프타임 명시를 잊어먹고 이 함수의 컴파일을 시도하면 `Rust`는 두 인수 중 어떤 쪽이 필요한지 알 가능성이 없어 두 인수 모두에게 `'a`를 추가하라고 함
+- `search` 함수에서는 `contents`가 모든 텍스트를 가지고 있는 인수이고 이 텍스트에서 일치하는 부분을 반환하고 싶은 것이므로, 연결되어야 할 라이프타임은 `contents`임
+
+```shell
+running 1 test
+test tests::one_result ... FAILED
+
+failures:
+
+---- tests::one_result stdout ----
+thread 'tests::one_result' panicked at src\lib.rs:55:9:
+assertion `left == right` failed
+  left: ["safe, fast, productive."]
+ right: []
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    tests::one_result
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `--lib`
+```
+
+### 12.4.2 테스트 통과하도록 코드 작성하기
+
+- `search` 함수 알고리즘
+  1. 내용물의 각 라인에 대해 반복
+  2. 해당 라인의 질의 문자열(`query`)를 담고 있는지 검사
+  3. 담고 있다면 반환하고자 하는 값의 리스트에 추가
+  4. 담고 있지 않다면 아무 것도 하지 않음
+  5. 매칭된 결과 리스트를 반환
+
+#### `lines` 메서드로 라인들에 대해 반복하기
+
+```rust
+for line in contents.lines() {
+  // do something with line
+}
+```
+
+- `lines` 메서드는 반복자를 반환
+
+#### 각 라인에서 질의값 검색하기
+
+```rust
+if line.contains(query) {
+  // do something with line
+}
+```
+
+#### 매칭된 라인 저장하기
+
+```rust
+let mut results = Vec::new();
+// ...
+results.push(line);
+// ...
+```
+
+- 이 시점에서, 테스트가 계속 통과하도록 유지하면서 이 검색 함수의 구현을 리팩터링할 기회를 고려해볼 수 있음
+
+#### `run` 함수에서 `search` 함수 사용하기
+
+```rust
+for line in search(&config.query, &contents) {
+  println!("{line}");
+}
+```
+
+## 12.5 환경 변수 사용하기
+
+- 환경 변수를 통해 대소문자를 구분하지 않는 검색 옵션 추가
+
+### 12.5.1 대소문자를 구분하지 않는 `search` 함수에 대한 실패하는 테스트 작성하기
+
+```rust
+#[test]
+fn case_sensitive() {
+  let query = "duct";
+  let contents = "\
+Rust:
+safe, fast, productive.
+Pick three.
+Duct tape.";
+
+  assert_eq!(vec!["safe, fast, productive."], search(query, contents));
+}
+
+#[test]
+fn case_insensitive() {
+  let query = "rUsT";
+  let contents = "\
+Rust:
+safe, fast, productive.
+Pick three.
+Trust me.";
+
+  assert_eq!(
+    vec!["Rust:", "Trust me."],
+    search_case_insensitive(query, contents)
+  );
+}
+```
+
+- 예전 테스트의 `contents`도 대문자 D를 사용한 `"Duct tape."` 라인을 추가
+  - 이렇게 예전 테스트를 변경하는 것은 이미 구현된 대소문자를 구분하는 검색을 우발적으로 깨뜨리지 않도록 확인하는 데 도움을 줌
+  - 이 테스트는 계속해서 통과되어야 함
+
+### 12.5.2 `search-case-insensitive` 함수 구현하기
+
+```rust
+pub fn search_case_insensitive<'a>(query: &str, contents: &'a str) -> Vec<&'a str> {
+  contents
+    .lines()
+    .filter(|line| line.to_lowercase().contains(&query.to_lowercase()))
+    .collect()
+}
+```
+
+- 인자를 모두 소문자로 만들어서 대소문자를 구분하지 않게 됨
+- `to_lowercase`가 기본적인 유니코드를 처리하겠지만, 100% 정확하지는 않으므로 실제 애플리케이션에서는 약간의 작업이 추가될 필요가 있음
+- `to_lowercase`의 호출이 존재하는 데이터를 참조하지 않고 새로운 데이터를 만들기 때문에, 인수로 넘길 때 기존의 변수 시그니처와 같도록 `&`를 붙여줄 필요가 있음
+
+```shell
+$ cargo test
+   Compiling io-project v0.1.0 (C:\Users\ghooz\source\Rust\handbook-rust\12_io-project)
+    Finished test [unoptimized + debuginfo] target(s) in 0.88s
+     Running unittests src\lib.rs (target\debug\deps\io_project-305978ccc9c3000e.exe)
+
+running 2 tests
+test tests::case_insensitive ... ok
+test tests::case_sensitive ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\main.rs (target\debug\deps\io_project-3d29abfff5b26378.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests io-project
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+```
+
+- `search_case_insensitive` 함수를 `run` 함수에서 호출하기 위해 `Config` 구조체에 대소문자 구분 여부를 전환하기 위한 옵션을 추가
+
+```rust
+pub struct Config {
+  pub query: String,
+  pub file_path: String,
+  pub ignore_case: bool,
+}
+
+pub fn run(config: Config) -> Result<(), Box<dyn std::error::Error>> {
+  let contents = fs::read_to_string(config.file_path)?;
+
+  let results = if config.ignore_case {
+    search_case_insensitive(&config.query, &contents)
+  } else {
+    search(&config.query, &contents)
+  };
+  for line in results {
+    println!("{line}");
+  }
+
+  Ok(())
+}
+```
+
+- 마지막으로 환경 변수의 검사가 필요
+- 환경 변수 사용을 위한 함수는 표준 라이브러리의 `env` 모듈에 있으므로, `env::var` 함수를 사용하여 `IGNORE_CASE`라는 이름의 환경 변수에 어떤 값이 설정되었는지 확인
+
+```rust
+pub fn build(args: &[String]) -> Result<Self, &'static str> {
+  if args.len() < 3 {
+    return Err("not enough arguments");
+  }
+
+  let query = args[1].clone();
+  let file_path = args[2].clone();
+
+  // 값의 내용 보다는 여부가 중요하므로 `is_ok` 함수 사용
+  let ignore_case = env::var("IGNORE_CASE").is_ok();
+
+  Ok(Config {
+    query,
+    file_path,
+    ignore_case,
+  })
+}
+```
+
+- 예제 1
+
+  ```shell
+  $ cargo run -- to poem.txt
+      Finished dev [unoptimized + debuginfo] target(s) in 0.01s
+      Running `target\debug\io-project.exe to poem.txt`
+  Are you nobody, too?
+  How dreary to be somebody!
+  ```
+
+- 예제 2
+
+  ```shell
+  $ IGNORE_CASE=1 cargo run -- to poem.txt
+      Finished dev [unoptimized + debuginfo] target(s) in 0.01s
+      Running `target\debug\io-project.exe to poem.txt`
+  Are you nobody, too?
+  How dreary to be somebody!
+  To tell your name the livelong day
+  To an admiring bog!
+  ```
+
+## 12.6 표준 출력 대신 표준 에러로 에러 메시지 작성하기
+
+- 현재는 터미널에 모두 `println!` 매크로로 출력하고 있는 상태
+- 터미널에는 두 종류의 출력이 있음
+  - 표준 출력(standard output, `stdout`): 범용적인 정보
+  - 표준 에러(standard error, `stderr`): 에러 메시지
+- 이 구분으로 성공한 프로그램의 출력값을 파일로 향하게끔, 그리고 에러 메시지는 여전히 화면에 나타나도록 할 수 있음
+
+### 12.6.1 에러가 기록되었는지 검사하기
+
+- 현재는 표준 출력을 사용하고 있으므로 스트림을 리디렉션 하게 되면 에러 메시지도 모두 넘어감
+- 커맨드 라인 프로그램은 표준 에러 스트림 쪽으로 에러 메시지를 보내야 하므로 표준 출력 스트림이 파일로 리디렉션되더라도 여전히 에러 메시지는 화면에서 볼 수 있음
+- 리디렉션 명령어
+  ```shell
+  cargo run > output.txt
+  # 명령어의 실행 결과를 `output.txt`로 리디렉션
+  ```
+- 출력 결과(`output.txt`)
+  ```txt
+  Problem parsing arguments: not enough arguments
+  ```
+- 이런 에러 메시지는 표준 에러로 출력되게 함으로써 성공적인 실행으로부터 나온 데이터만 파일로 향하게 만드는 것이 훨씬 유용
+
+### 12.6.2 표준 에러로 에러 출력하기
+
+- 표준 라이브러리는 표준 에러 스트림을 출력하는 `eprintln!` 매크로를 제공하므로 `println!` 매크로를 `eprintln!`으로 바꾸면 됨
+
+```rust
+let config = Config::build(&args).unwrap_or_else(|err| {
+  eprintln!("Problem parsing arguments: {err}");
+  std::process::exit(1);
+});
+
+if let Err(e) = io_project::run(config) {
+  eprintln!("Application error: {e}");
+  std::process::exit(1);
+}
+```
+
+- 예시 1
+  ```shell
+  $ cargo run > output.txt
+    Compiling io-project v0.1.0 (C:\Users\ghooz\source\Rust\handbook-rust\12_io-project)
+      Finished dev [unoptimized + debuginfo] target(s) in 0.63s
+        Running `target\debug\io-project.exe`
+  Problem parsing arguments: not enough arguments
+  ```
+- 예시 2
+  ```shell
+  $ cargo run -- to poem.txt > output.txt
+  ```
+- 예시 2(`output.txt`)
+  ```txt
+  Are you nobody, too?
+  How dreary to be somebody!
+  ```

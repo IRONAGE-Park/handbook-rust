@@ -252,3 +252,210 @@ fn main() {
 - 이 예제는 스레드의 실행 순서가 보장되지 않으므로 `move` 키워드를 집어 넣어 `list`가 이동되어야 함을 명시할 필요가 있음
   - 만일 메인 스레드가 `list`의 소유권을 유지하고 있는데 새 스레드가 끝나기 전에 끝나버려서 `list`를 제거한다면, 새 스레드의 불변 참조자는 유효하지 않게 됨
 - 따라서 컴파일러는 `list`를 새 스레드에 제공될 클로저로 이동시켜 참조자가 유효하도록 요구
+
+### 13.1.4 캡처된 값을 클로저 밖으로 이동하기와 `Fn` 트레이트
+
+- 클로저가 자신이 정의된 환경으로부터 값의 참조자 혹은 소유권을 캡처하면, 클로저 본문의 코드는 이 클로저가 나중에 평가될 때 그 참조자나 값에 어떤 일이 발생하는지 정의
+  - 캡처된 값을 클로저 밖으로 이동시키기
+  - 캡처된 값을 변형하기
+  - 캡처만 하기
+  - 캡처하지 않기
+- 위와 같이 캡처한 값을 다루는 방식은 클로저가 구현하는 `Fn` 트레이트에 영향을 주고, 어떤 명시의 클로저를 사용하는지 파악할 수 있음
+- 클로저는 클로저의 본문이 값을 처리하는 방식에 따라서 이 `Fn` 트레이트들 중 하나, 혹은 모두를 추가하는 방식으로 자동으로 구현됨
+
+1. `FnOnce`: 한 번만 호출될 수 있는 클로저. 모든 클로저는 이 트레이트를 구현함(캡처된 값을 본문 밖으로 이동시키는 경우도 포함)
+2. `FnMut`: 캡처된 값을 본문 밖으로 이동시키지는 않지만 변경할 수 있는 클로저.
+3. `Fn`: 캡처된 값을 본문 밖으로 이동시키지 않고 변경하지도 않는, 환경으로부터 아무런 값도 캡처하지 않는 클로저.
+
+- `Option<T>::unwrap_or_else`의 정의
+
+```rust
+impl<T> Opton<T> {
+  pub fn unwrap_or_else<F>(self, f: F) -> T
+  where
+    F: FnOnce() -> T // `f`가 한 번만 호출될 수 있어야 하고, 인수가 없고, `T`를 반환함
+    // `FnOnce`를 사용하는 것은 정의한 함수가 `f`를 아무리 많아야 한 번만 호출할 것이라는 제약 사항을 표현
+    // 모든 클로저가 `FnOnce`를 구현하므로 `unwrap_or_else`는 가장 다양한 종류의 클로저를 허용하며 될 수 있는 한 유연하게 동작
+  {
+    match self {
+      Some(x) => x,
+      None => f()
+    }
+  }
+}
+```
+
+> 함수도 이 세 종류의 `Fn` 트레이트를 모두 구현할 수 있음. 따라서 클로저 대신 함수를 사용할 수도 있음.  
+> Example: `unwrap_or_else(Vec::new)`
+
+- `sort_by_key`와 `unwrap_or_else`의 비교를 통해 `FnOnce`와 `FnMut`의 차이점 구분
+- `[T].sort_by_key`의 정의
+
+```rust
+impl<T> [T] {
+  pub fn sort_by_key<K, F>(&mut self, mut f: F)
+  where
+    F: FnMut(&T) -> K,
+    K: Ord
+  {
+    stable_sort(self, |a, b| f(a).lt(&f(b)));
+  }
+}
+```
+
+- `sort_by_key`는 각 아이템의 특정 속성을 이용하여 슬라이스를 정렬하고 싶을 때 유용
+- 아래 코드는 `width` 속성을 낮은 것부터 높은 순으로 정렬
+
+```rust
+#[derive(Debug)]
+struct Rectangle {
+  width: u32,
+  height: u32,
+}
+
+fn main() {
+  let mut list = [
+    Rectangle {
+      width: 10,
+      height: 1,
+    },
+    Rectangle {
+      width: 3,
+      height: 5,
+    },
+    Rectangle {
+      width: 7,
+      height: 12,
+    },
+  ];
+  list.sort_by_key(|r| r.width);
+  println!("{:#?}", list);
+}
+```
+
+```shell
+$ cargo run
+   Compiling functional-features v0.1.0 (C:\Users\ghooz\source\Rust\handbook-rust\13_functional-features)
+warning: field `height` is never read
+  --> src/main.rs:98:5
+   |
+96 | struct Rectangle {
+   |        --------- field in this struct
+97 |     width: u32,
+98 |     height: u32,
+   |     ^^^^^^
+   |
+   = note: `Rectangle` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+   = note: `#[warn(dead_code)]` on by default
+
+warning: `functional-features` (bin "functional-features") generated 1 warning
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.25s
+     Running `target\debug\functional-features.exe`
+[
+    Rectangle {
+        width: 3,
+        height: 5,
+    },
+    Rectangle {
+        width: 7,
+        height: 12,
+    },
+    Rectangle {
+        width: 10,
+        height: 1,
+    },
+]
+```
+
+- `sort_by_key`가 `FnMut` 클로저를 갖도록 정의된 이유는 이 함수가 클로저를 여러 번 호출하기 때문
+- 클로저는 자신의 환경으로부터 어떤 것도 캡처나 변형, 혹은 이동시키지 않으므로 `FnMut` 트레이트를 구현하여 트레이트 바운드 요건을 충족함
+- `FnOnce` 트레이트만 구현한 클로저의 경우 `sort_by_key`에 사용할 수 없음
+
+```rust
+let mut sort_operations = vec![];
+let value = String::from("by key called");
+list.sort_by_key(|r| {
+  // 이 클로저는 `FnMut`를 구현하지 않음, 캡처된 값을 외부로 내보내고 있기 때문
+  // let value = String::from("by key called"); 처럼 `value`를 외부가 아닌 내부에 선언해도 사용 가능
+  sort_operations.push(value); // value.clone()을 통해 소유권을 밖으로 내보내지 않으면 사용 가능
+  r.width
+});
+```
+
+- 클로저는 `value`를 캡처한 다음 `value`의 소유권을 `sort_operations` 벡터로 보내서 `value`를 클로저 밖으로 이동시킴
+- 이 클로저는 한 번만 호출될 수 있는데, 두 번째 호출 시도가 발생하고 이때 `value`가 더이상 환경에 남아있지 않아 동작하지 않음
+- 이 클로저는 `FnOnce` 만을 구현하고 있으며, 클로저가 `FnMut`를 구현해야 사용 가능
+
+```shell
+$ cargo run
+   Compiling functional-features v0.1.0 (C:\Users\ghooz\source\Rust\handbook-rust\13_functional-features)
+error[E0507]: cannot move out of `value`, a captured variable in an `FnMut` closure
+  --> src/main.rs:95:30
+   |
+93 |     let value = String::from("by key called");
+   |         ----- captured outer variable
+94 |     list.sort_by_key(|r| {
+   |                      --- captured by this `FnMut` closure
+95 |         sort_operations.push(value);
+   |                              ^^^^^ move occurs because `value` has type `String`, which does not implement the `Copy` trait
+   |
+help: consider cloning the value if the performance cost is acceptable
+   |
+95 |         sort_operations.push(value.clone());
+   |                                   ++++++++
+
+For more information about this error, try `rustc --explain E0507`.
+error: could not compile `functional-features` (bin "functional-features") due to 1 previous error
+```
+
+- 아래와 같이 가변 참조자를 캡처하는 방식으로 `FnMut`를 구현하게 하면 해결할 수 있음
+
+```rust
+let mut sort_operations = vec![];
+let mut num_sort_operations = 0;
+let value = String::from("by key called");
+list.sort_by_key(|r| {
+    sort_operations.push(value.clone());
+    num_sort_operations += 1;
+    r.width
+});
+println!("{:#?}, sorted in {num_sort_operations} operations", list);
+```
+
+```shell
+$ cargo run
+   Compiling functional-features v0.1.0 (C:\Users\ghooz\source\Rust\handbook-rust\13_functional-features)
+warning: field `height` is never read
+   --> src/main.rs:106:5
+    |
+104 | struct Rectangle {
+    |        --------- field in this struct
+105 |     width: u32,
+106 |     height: u32,
+    |     ^^^^^^
+    |
+    = note: `Rectangle` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+    = note: `#[warn(dead_code)]` on by default
+
+warning: `functional-features` (bin "functional-features") generated 1 warning
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.72s
+     Running `target\debug\functional-features.exe`
+[
+    Rectangle {
+        width: 3,
+        height: 5,
+    },
+    Rectangle {
+        width: 7,
+        height: 12,
+    },
+    Rectangle {
+        width: 10,
+        height: 1,
+    },
+], sorted in 6 operations
+```
+
+- `Fn` 트레이트는 클로저를 사용하는 함수 혹은 타입을 정의하고 사용할 때 중요
+
+## 13.2 반복자로 일련의 아이템들 처리하기

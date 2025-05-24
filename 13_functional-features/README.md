@@ -459,3 +459,87 @@ warning: `functional-features` (bin "functional-features") generated 1 warning
 - `Fn` 트레이트는 클로저를 사용하는 함수 혹은 타입을 정의하고 사용할 때 중요
 
 ## 13.2 반복자로 일련의 아이템들 처리하기
+
+- 반복자 패턴은 일련의 아이템들에 대해 순서대로 어떤 작업을 수행할 수 있게 함
+- 각 아이템을 순회하고 시퀀스 종료 시점을 결정하는 로직을 담당
+- `Rust`에서는 단순히 반복자를 생성하는 것으로는 아무 일이 일어나지 않음
+- 반복자는 다양한 방법으로 활용될 수 있으며, `Rust`에서는 `for` 루프를 사용할 수 있도록 제공
+- Example Code
+
+  ```rust
+  let v1 = vec![1, 2, 3];
+  let v1_iter = v1.iter();
+
+  for val in v1_iter {
+    println!("Got: {}", val);
+  }
+  ```
+
+- Output
+
+  ```bash
+  $ cargo run
+    Compiling functional-features v0.1.0 (C:\Users\ghooz\sources\Rust\handbook-rust\13_functional-features)
+      Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.38s
+      Running `target\debug\functional-features.exe`
+  Got: 1
+  Got: 2
+  Got: 3
+  ```
+
+- 벡터처럼 인덱스를 사용하는 자료구조 외에 많은 다른 케이스에도 사용 가능함
+
+### `Iterator` 트레이트와 `next` 메서드
+
+```rust
+pub trait Iterator {
+  type Item;
+
+  fn next(&mut self) -> Option<Self::Item>;
+
+  // ...
+}
+```
+
+- `Rust`에서 모든 반복자는 표준 라이브러리에 정의된 `Iterator` 라는 이름의 트레이트를 구현
+- `type Item`, `Self::Item`은 연관 타입(associated type)이라고 부름
+  - `Iterator`를 구현하려면 연관 타입도 함께 정의해야 하며, 이 타입이 `next` 메서드의 반환 타입
+  - `Item` 타입은 반복자로부터 반환되는 타입 -> `Vec<T>`에서 `T` 타입
+- `Iterator`는 딱 하나의 메서드, `next`의 정의를 요구
+  - `next` 메서드는 `Option` 타입으로 `Some`으로 감싼 아이템으로 반복 시도, `None` 반환 시 반복 종료를 나타냄
+
+```rust
+#[test]
+fn iterator_demonstration() {
+  let v1 = vec![1, 2, 3];
+  let mut v1_iter = v1.iter();
+
+  assert_eq!(v1_iter.next(), Some(&1));
+  assert_eq!(v1_iter.next(), Some(&2));
+  assert_eq!(v1_iter.next(), Some(&3));
+  assert_eq!(v1_iter.next(), None);
+}
+```
+
+- `next`를 호출할 경우, 반복자 내부 상태를 변경하기 때문에 `mut` 변수로 선언해두어야 함
+- 즉, `next` 메서드는 반복자를 소비(consume), `for` 루프의 경우에는 루프가 `v1_iter`의 소유권을 갖고 내부에서 가변으로 만들기 때문에 가변일 필요는 없음
+
+> `iter` 메서드는 불변 참조자에 대한 반복자를 반환하며, 소유권을 얻어야 하는 경우 `into_iter`, 가변 참조자에 대한 반복자가 필요하다면 `iter_mut`를 호출
+
+### 반복자를 소비하는 메서드
+
+- `next`를 호출하는 메서드들을 소비 어댑터(consuming adaptor)라고 함
+- 호출하면 반복자를 소비하기 때문에, 호출 후 `iter`를 사용할 수 없음
+
+```rust
+#[test]
+fn iterator_sum() {
+  let v1 = vec![1, 2, 3];
+  let v1_iter = v1.iter();
+
+  let total: i32 = v1_iter.sum();
+  // `sum`을 호출한 이후에는 `v1_iter`가 소모되므로 더이상 사용할 수 없음
+  assert_eq!(total, 6);
+}
+
+```

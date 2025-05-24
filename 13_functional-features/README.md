@@ -590,3 +590,61 @@ assert_eq!(v2, vec![2, 3, 4]);
 > `Iterator` 트레이트가 제공하는 반복 동작을 재사용하면서 클로저로 동작의 일부를 커스터마이징할 수 있게 해주는 대표적인 예시
 
 ### 환경을 캡처하는 클로저 사용하기
+
+- 많은 반복자 어댑터는 클로저를 인수로 사용하고, 보통 자신의 환경을 캡처하는 클로저일 것
+- `filter` 메서드는 `bool`을 반환하며, `true` 반환 시 그 값을 다음 반복자에 포함, `false` 반환 시 해당 값을 포함하지 않음
+- Example Code: 환경으로부터 `shoe_size`를 캡처하는 클로저를 가지고 지정된 크기의 신발만을 반환하는 예제
+
+```rust
+#[derive(PartialEq, Debug)]
+struct Shoe {
+  size: u32,
+  style: String,
+}
+
+fn shoes_in_size(shoes: Vec<Shoe>, size: u32) -> Vec<Shoe> {
+  // `iter`로 선언할 경우, 반환할 때 소유권 문제 발생
+  shoes.into_iter().filter(|s| s.size == size).collect()
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn filters_by_size() {
+    let shoes = vec![
+      Shoe {
+        size: 10,
+        style: String::from("sneaker"),
+      },
+      Shoe {
+        size: 12,
+        style: String::from("sandal"),
+      },
+      Shoe {
+        size: 10,
+        style: String::from("boot"),
+      },
+    ];
+
+    let in_my_size = shoes_in_size(shoes, 10);
+    assert_eq!(
+      in_my_size,
+      vec![
+        Shoe {
+          size: 10,
+          style: String::from("sneaker")
+        },
+        Shoe {
+          size: 10,
+          style: String::from("boot")
+        }
+      ]
+    );
+  }
+}
+
+```
+
+- `shoes_in_size`의 본문에서 `into_iter`를 호출하여 벡터의 **소유권**을 갖는 반복자를 생성

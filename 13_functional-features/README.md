@@ -476,7 +476,6 @@ warning: `functional-features` (bin "functional-features") generated 1 warning
   ```
 
 - Output
-
   ```bash
   $ cargo run
     Compiling functional-features v0.1.0 (C:\Users\ghooz\sources\Rust\handbook-rust\13_functional-features)
@@ -486,7 +485,6 @@ warning: `functional-features` (bin "functional-features") generated 1 warning
   Got: 2
   Got: 3
   ```
-
 - 벡터처럼 인덱스를 사용하는 자료구조 외에 많은 다른 케이스에도 사용 가능함
 
 ### `Iterator` 트레이트와 `next` 메서드
@@ -543,3 +541,52 @@ fn iterator_sum() {
 }
 
 ```
+
+### 다른 반복자를 생성하는 메서드
+
+- 반복자 어댑터(iterator adaptor): `Iterator`에 정의된 메서드로, 반복자를 소비하지 않고 원본 반복자를 다른 반복자로 바꿔서 제공
+- Example Code
+  ```rust
+  let v1 = vec![1, 2, 3];
+  v1.iter().map(|x| x + 1); // 각 벡터의 아이템에서 1이 증가한 새로운 반복자 반환
+  ```
+- Output
+
+  ```bash
+  $ cargo run
+   Compiling functional-features v0.1.0 (C:\Users\ghooz\sources\Rust\handbook-rust\13_functional-features)
+  warning: unused `Map` that must be used
+  --> src\main.rs:3:5
+    |
+  3 |     v1.iter().map(|x| x + 1);
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: iterators are lazy and do nothing unless consumed
+    = note: `#[warn(unused_must_use)]` on by default
+  help: use `let _ = ...` to ignore the resulting value
+    |
+  3 |     let _ = v1.iter().map(|x| x + 1);
+    |     +++++++
+
+  warning: `functional-features` (bin "functional-features") generated 1 warning
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.39s
+      Running `target\debug\functional-features.exe`
+  ```
+
+- 에러가 발생하는 이유는 반복자를 소비하지 않았기 때문이며, 반복자를 소비할 필요가 있다는 것을 나타냄
+
+```rust
+let v1 = vec![1, 2, 3];
+let v2: Vec<_> = v1.iter().map(|x| x + 1).collect();
+
+assert_eq!(v2, vec![2, 3, 4]);
+```
+
+- `collect` 메서드는 반복자를 소비하고 결괏값을 모아서 컬렉션 데이터 타입으로 만듬
+- `map`은 클로저를 인수로 받기 때문에, 연산의 정의에 대해 자유로워 그 어떤 연산이라도 지정할 수 있음
+- 반복자 어댑터의 호출을 연결시키면 복잡한 동작을 읽기 쉬운 방식으로 수행 가능
+- **모든 반복자는 게으르므로, 반복자 어댑터를 호출한 결과를 얻기 위해서는 소비 어댑터 중 하나를 호출해야만 함**
+
+> `Iterator` 트레이트가 제공하는 반복 동작을 재사용하면서 클로저로 동작의 일부를 커스터마이징할 수 있게 해주는 대표적인 예시
+
+### 환경을 캡처하는 클로저 사용하기

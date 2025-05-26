@@ -648,3 +648,94 @@ mod tests {
 ```
 
 - `shoes_in_size`의 본문에서 `into_iter`를 호출하여 벡터의 **소유권**을 갖는 반복자를 생성
+
+## 13.3 I/O 프로젝트 개선하기
+
+### 반복자를 사용하여 `clone` 제거하기
+
+- 12장에서 작성했던 `Config::build` 함수 내에서 `.clone`을 호출한 것에 대해 반복자를 통해 제거할 수 있음
+- 기존 `build` 함수는 `args`를 소유하지 않기 때문에 `clone`이 필요했으나, 반복자의 소유권을 갖도록 `build` 함수를 수정할 수 있음
+- 반복자가 값에 접근하기 때문에 `Config::build` 함수가 수행하는 작업이 명확해짐
+
+#### 반환된 반복자를 직접 사용하기
+
+```rust
+let config = Config::build(env::args()).unwrap_or_else(|err| {
+  eprintln!("Problem parsing arguments: {err}");
+  std::process::exit(1);
+});
+```
+
+- `main` 함수에서 `Vec<String>` 타입으로 넘기던 `args`를 반복자 그대로 넘겨줌
+- `env::args()`는 `Args` 타입을 반환하며, `Args` 타입은 아래와 같이 `Iterator`를 구현하고 있음
+
+```rust
+#[stable(feature = "env", since = "1.0.0")]
+impl Iterator for Args {
+    type Item = String;
+    fn next(&mut self) -> Option<String> {
+        self.inner.next().map(|s| s.into_string().unwrap())
+    }
+    // ...
+}
+```
+
+#### 인덱싱 대신 `Iterator` 트레이트 메서드 사용하기
+
+- `Config::build` 함수는 반복자의 소유권을 직접 전달받도록 시그니처를 변경
+- 이러한 `Trait` 문법을 사용하면, `args`가 `Iterator` 타입을 구현하면서 `String` 아이템을 반환하는 모든 종류의 타입 사용 가능
+  - `args`의 소유권을 가져온 후 이를 순회(`.next()`로 상태 변경)할 것이기 때문에, `mut` 키워드 추가(추가하지 않으면 `.next()` 사용 시 타입 에러)
+- 이후, 첫 번째 인자(프로그램 이름)을 `.next()` 메서드로 건너뛰고 나머지 두 인자에 접근함
+
+```rust
+impl Config {
+  pub fn build(
+    mut args: impl Iterator<Item = String>
+  ) -> Result<Config, &'static str> {
+    args.next();
+
+    let query = match args.next() {
+      Some(arg) => arg,
+      None => return Err("Didn't get a query string"), // 충분한 인수가 넘어오지 않았음
+    };
+
+    let file_path = match args.next() {
+      Some(arg) => arg,
+      None => return Err("Didn't get a file path"),
+    };
+
+    let ignore_case = env::var("IGNORE_CASE").is_ok();
+
+    Ok(Config {
+      query,
+      file_path,
+      ignore_case
+    })
+  }
+}
+```
+
+### 반복자 어댑터로 더 간결한 코드 만들기
+
+- 반복자 어댑터 메서드를 사용하여 `search` 함수도 가변 벡터 `results`를 사용하지 않고 간결하게 작성할 수 있음
+- 함수형 프로그래밍 스타일은 변경 가능한 상태의 양을 최소화하는 편을 선호
+  - 가변 상태를 제거하면 `results` 벡터에 대한 동시 접근을 관리하지 않아도 되기 때문에, 차후에 검색을 병렬로 수행하는 등의 향상이 가능
+
+```rust
+pub fn search<'a>(query: &str, contents: &'a str) -> Vec<&'a str> {
+  // query를 포함하는 contents의 모든 라인을 반환
+  contents
+    .lines()
+    .filter(|line| line.contains(query))
+    .collect()
+}
+pub fn search_case_insensitive<'a>(query: &str, contents: &'a str) -> Vec<&'a str> {
+  contents
+    .lines()
+    .filter(|line| line.to_lowercase().contains(&query.to_lowercase()))
+    .collect()
+}
+```
+
+- `Rust` 프로그래머는 반복자 스타일을 선호하며, 루프의 고수준 목표에 집중함
+- 반복에 대한 아주 흔한 코드를 추상화해서 제거하므로, 코드에 유일한 개념을 더 알기 쉽게 함

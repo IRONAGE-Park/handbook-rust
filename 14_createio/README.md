@@ -42,3 +42,7 @@ $ cargo build --release
 > [카고 공식 문서](https://doc.rust-lang.org/cargo/reference/profiles.html)
 
 ---
+
+## 14.2 Crates.io에 크레이트 배포하기
+
+## 유용한 문서화 주석 만들기

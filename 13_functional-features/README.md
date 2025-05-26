@@ -458,4 +458,338 @@ warning: `functional-features` (bin "functional-features") generated 1 warning
 
 - `Fn` 트레이트는 클로저를 사용하는 함수 혹은 타입을 정의하고 사용할 때 중요
 
+---
+
 ## 13.2 반복자로 일련의 아이템들 처리하기
+
+- 반복자 패턴은 일련의 아이템들에 대해 순서대로 어떤 작업을 수행할 수 있게 함
+- 각 아이템을 순회하고 시퀀스 종료 시점을 결정하는 로직을 담당
+- `Rust`에서는 단순히 반복자를 생성하는 것으로는 아무 일이 일어나지 않음
+- 반복자는 다양한 방법으로 활용될 수 있으며, `Rust`에서는 `for` 루프를 사용할 수 있도록 제공
+- Example Code
+
+  ```rust
+  let v1 = vec![1, 2, 3];
+  let v1_iter = v1.iter();
+
+  for val in v1_iter {
+    println!("Got: {}", val);
+  }
+  ```
+
+- Output
+  ```bash
+  $ cargo run
+    Compiling functional-features v0.1.0 (C:\Users\ghooz\sources\Rust\handbook-rust\13_functional-features)
+      Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.38s
+      Running `target\debug\functional-features.exe`
+  Got: 1
+  Got: 2
+  Got: 3
+  ```
+- 벡터처럼 인덱스를 사용하는 자료구조 외에 많은 다른 케이스에도 사용 가능함
+
+### `Iterator` 트레이트와 `next` 메서드
+
+```rust
+pub trait Iterator {
+  type Item;
+
+  fn next(&mut self) -> Option<Self::Item>;
+
+  // ...
+}
+```
+
+- `Rust`에서 모든 반복자는 표준 라이브러리에 정의된 `Iterator` 라는 이름의 트레이트를 구현
+- `type Item`, `Self::Item`은 연관 타입(associated type)이라고 부름
+  - `Iterator`를 구현하려면 연관 타입도 함께 정의해야 하며, 이 타입이 `next` 메서드의 반환 타입
+  - `Item` 타입은 반복자로부터 반환되는 타입 -> `Vec<T>`에서 `T` 타입
+- `Iterator`는 딱 하나의 메서드, `next`의 정의를 요구
+  - `next` 메서드는 `Option` 타입으로 `Some`으로 감싼 아이템으로 반복 시도, `None` 반환 시 반복 종료를 나타냄
+
+```rust
+#[test]
+fn iterator_demonstration() {
+  let v1 = vec![1, 2, 3];
+  let mut v1_iter = v1.iter();
+
+  assert_eq!(v1_iter.next(), Some(&1));
+  assert_eq!(v1_iter.next(), Some(&2));
+  assert_eq!(v1_iter.next(), Some(&3));
+  assert_eq!(v1_iter.next(), None);
+}
+```
+
+- `next`를 호출할 경우, 반복자 내부 상태를 변경하기 때문에 `mut` 변수로 선언해두어야 함
+- 즉, `next` 메서드는 반복자를 소비(consume), `for` 루프의 경우에는 루프가 `v1_iter`의 소유권을 갖고 내부에서 가변으로 만들기 때문에 가변일 필요는 없음
+
+> `iter` 메서드는 불변 참조자에 대한 반복자를 반환하며, 소유권을 얻어야 하는 경우 `into_iter`, 가변 참조자에 대한 반복자가 필요하다면 `iter_mut`를 호출
+
+### 반복자를 소비하는 메서드
+
+- `next`를 호출하는 메서드들을 소비 어댑터(consuming adaptor)라고 함
+- 호출하면 반복자를 소비하기 때문에, 호출 후 `iter`를 사용할 수 없음
+
+```rust
+#[test]
+fn iterator_sum() {
+  let v1 = vec![1, 2, 3];
+  let v1_iter = v1.iter();
+
+  let total: i32 = v1_iter.sum();
+  // `sum`을 호출한 이후에는 `v1_iter`가 소모되므로 더이상 사용할 수 없음
+  assert_eq!(total, 6);
+}
+
+```
+
+### 다른 반복자를 생성하는 메서드
+
+- 반복자 어댑터(iterator adaptor): `Iterator`에 정의된 메서드로, 반복자를 소비하지 않고 원본 반복자를 다른 반복자로 바꿔서 제공
+- Example Code
+  ```rust
+  let v1 = vec![1, 2, 3];
+  v1.iter().map(|x| x + 1); // 각 벡터의 아이템에서 1이 증가한 새로운 반복자 반환
+  ```
+- Output
+
+  ```bash
+  $ cargo run
+   Compiling functional-features v0.1.0 (C:\Users\ghooz\sources\Rust\handbook-rust\13_functional-features)
+  warning: unused `Map` that must be used
+  --> src\main.rs:3:5
+    |
+  3 |     v1.iter().map(|x| x + 1);
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: iterators are lazy and do nothing unless consumed
+    = note: `#[warn(unused_must_use)]` on by default
+  help: use `let _ = ...` to ignore the resulting value
+    |
+  3 |     let _ = v1.iter().map(|x| x + 1);
+    |     +++++++
+
+  warning: `functional-features` (bin "functional-features") generated 1 warning
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.39s
+      Running `target\debug\functional-features.exe`
+  ```
+
+- 에러가 발생하는 이유는 반복자를 소비하지 않았기 때문이며, 반복자를 소비할 필요가 있다는 것을 나타냄
+
+```rust
+let v1 = vec![1, 2, 3];
+let v2: Vec<_> = v1.iter().map(|x| x + 1).collect();
+
+assert_eq!(v2, vec![2, 3, 4]);
+```
+
+- `collect` 메서드는 반복자를 소비하고 결괏값을 모아서 컬렉션 데이터 타입으로 만듬
+- `map`은 클로저를 인수로 받기 때문에, 연산의 정의에 대해 자유로워 그 어떤 연산이라도 지정할 수 있음
+- 반복자 어댑터의 호출을 연결시키면 복잡한 동작을 읽기 쉬운 방식으로 수행 가능
+- **모든 반복자는 게으르므로, 반복자 어댑터를 호출한 결과를 얻기 위해서는 소비 어댑터 중 하나를 호출해야만 함**
+
+> `Iterator` 트레이트가 제공하는 반복 동작을 재사용하면서 클로저로 동작의 일부를 커스터마이징할 수 있게 해주는 대표적인 예시
+
+### 환경을 캡처하는 클로저 사용하기
+
+- 많은 반복자 어댑터는 클로저를 인수로 사용하고, 보통 자신의 환경을 캡처하는 클로저일 것
+- `filter` 메서드는 `bool`을 반환하며, `true` 반환 시 그 값을 다음 반복자에 포함, `false` 반환 시 해당 값을 포함하지 않음
+- Example Code: 환경으로부터 `shoe_size`를 캡처하는 클로저를 가지고 지정된 크기의 신발만을 반환하는 예제
+
+```rust
+#[derive(PartialEq, Debug)]
+struct Shoe {
+  size: u32,
+  style: String,
+}
+
+fn shoes_in_size(shoes: Vec<Shoe>, size: u32) -> Vec<Shoe> {
+  // `iter`로 선언할 경우, 반환할 때 소유권 문제 발생
+  shoes.into_iter().filter(|s| s.size == size).collect()
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn filters_by_size() {
+    let shoes = vec![
+      Shoe {
+        size: 10,
+        style: String::from("sneaker"),
+      },
+      Shoe {
+        size: 12,
+        style: String::from("sandal"),
+      },
+      Shoe {
+        size: 10,
+        style: String::from("boot"),
+      },
+    ];
+
+    let in_my_size = shoes_in_size(shoes, 10);
+    assert_eq!(
+      in_my_size,
+      vec![
+        Shoe {
+          size: 10,
+          style: String::from("sneaker")
+        },
+        Shoe {
+          size: 10,
+          style: String::from("boot")
+        }
+      ]
+    );
+  }
+}
+
+```
+
+- `shoes_in_size`의 본문에서 `into_iter`를 호출하여 벡터의 **소유권**을 갖는 반복자를 생성
+
+---
+
+## 13.3 I/O 프로젝트 개선하기
+
+### 반복자를 사용하여 `clone` 제거하기
+
+- 12장에서 작성했던 `Config::build` 함수 내에서 `.clone`을 호출한 것에 대해 반복자를 통해 제거할 수 있음
+- 기존 `build` 함수는 `args`를 소유하지 않기 때문에 `clone`이 필요했으나, 반복자의 소유권을 갖도록 `build` 함수를 수정할 수 있음
+- 반복자가 값에 접근하기 때문에 `Config::build` 함수가 수행하는 작업이 명확해짐
+
+#### 반환된 반복자를 직접 사용하기
+
+```rust
+let config = Config::build(env::args()).unwrap_or_else(|err| {
+  eprintln!("Problem parsing arguments: {err}");
+  std::process::exit(1);
+});
+```
+
+- `main` 함수에서 `Vec<String>` 타입으로 넘기던 `args`를 반복자 그대로 넘겨줌
+- `env::args()`는 `Args` 타입을 반환하며, `Args` 타입은 아래와 같이 `Iterator`를 구현하고 있음
+
+```rust
+#[stable(feature = "env", since = "1.0.0")]
+impl Iterator for Args {
+    type Item = String;
+    fn next(&mut self) -> Option<String> {
+        self.inner.next().map(|s| s.into_string().unwrap())
+    }
+    // ...
+}
+```
+
+#### 인덱싱 대신 `Iterator` 트레이트 메서드 사용하기
+
+- `Config::build` 함수는 반복자의 소유권을 직접 전달받도록 시그니처를 변경
+- 이러한 `Trait` 문법을 사용하면, `args`가 `Iterator` 타입을 구현하면서 `String` 아이템을 반환하는 모든 종류의 타입 사용 가능
+  - `args`의 소유권을 가져온 후 이를 순회(`.next()`로 상태 변경)할 것이기 때문에, `mut` 키워드 추가(추가하지 않으면 `.next()` 사용 시 타입 에러)
+- 이후, 첫 번째 인자(프로그램 이름)을 `.next()` 메서드로 건너뛰고 나머지 두 인자에 접근함
+
+```rust
+impl Config {
+  pub fn build(
+    mut args: impl Iterator<Item = String>
+  ) -> Result<Config, &'static str> {
+    args.next();
+
+    let query = match args.next() {
+      Some(arg) => arg,
+      None => return Err("Didn't get a query string"), // 충분한 인수가 넘어오지 않았음
+    };
+
+    let file_path = match args.next() {
+      Some(arg) => arg,
+      None => return Err("Didn't get a file path"),
+    };
+
+    let ignore_case = env::var("IGNORE_CASE").is_ok();
+
+    Ok(Config {
+      query,
+      file_path,
+      ignore_case
+    })
+  }
+}
+```
+
+### 반복자 어댑터로 더 간결한 코드 만들기
+
+- 반복자 어댑터 메서드를 사용하여 `search` 함수도 가변 벡터 `results`를 사용하지 않고 간결하게 작성할 수 있음
+- 함수형 프로그래밍 스타일은 변경 가능한 상태의 양을 최소화하는 편을 선호
+  - 가변 상태를 제거하면 `results` 벡터에 대한 동시 접근을 관리하지 않아도 되기 때문에, 차후에 검색을 병렬로 수행하는 등의 향상이 가능
+
+```rust
+pub fn search<'a>(query: &str, contents: &'a str) -> Vec<&'a str> {
+  // query를 포함하는 contents의 모든 라인을 반환
+  contents
+    .lines()
+    .filter(|line| line.contains(query))
+    .collect()
+}
+pub fn search_case_insensitive<'a>(query: &str, contents: &'a str) -> Vec<&'a str> {
+  contents
+    .lines()
+    .filter(|line| line.to_lowercase().contains(&query.to_lowercase()))
+    .collect()
+}
+```
+
+- `Rust` 프로그래머는 반복자 스타일을 선호하며, 루프의 고수준 목표에 집중함
+- 반복에 대한 아주 흔한 코드를 추상화해서 제거하므로, 코드에 유일한 개념을 더 알기 쉽게 함
+
+---
+
+## 13.4 성능 비교하기: 루프 vs. 반복자
+
+### 예제 1. I/O 프로젝트로 비교하기
+
+- 셜록 홈주의 모험 전체 내용을 로딩하고 `the`를 찾는 벤치마크 결과: `iter`가 약간 더 빠름
+
+```bash
+test bench_search_for  ... bench:  19,620,300 ns/iter (+/- 915,700)
+test bench_search_iter ... bench:  19,234,900 ns/iter (+/- 657,200)
+```
+
+- 더 종합적인 벤치마크를 위해서는 다양한 `contents`, `query`를 사용해야 함
+- 반복자는 고수준의 추상화지만, 컴파일 시 저수준의 코드와 같은 수준으로 내려감
+  - `Rust`의 비용 없는 추상화(Zero-cost abstraction) 중 하나이며, 그 추상을 사용하면 추가적인 런타임 오버헤드가 없다는 것을 의미
+- 반복자를 사용해도, 실제로 직접 구현한 반복문으로 이 성능을 뛰어넘기 힘들다는 의미
+
+> 일반적으로 C++ 구현은 제로 오버헤드 원칙을 준수합니다: 사용하지 않는 것에 대해서는 비용을 지불하지 않습니다. 그리고 더 나아가서, 사용한다면 이보다 더 나은 코드를 수작업으로 만들 수 없습니다.  
+> -비야네 스트롭스트룹(C++ 기초, 2012)-
+
+### 예제 2. 오디오 디코더
+
+```rust
+let buffer: &mut [i32];
+let coefficients: [i64; 12];
+let qlp_shift: i16;
+
+for i in 12..buffer.len() {
+  let prediction + coefficients.iter()
+                                // coefficients에 있는 12개 값 순회
+                                .zip(&buffer[i - 12..i])
+                                // buffer의 이전 12개 값 간의 쌍을 만들고 곱함
+                                .map(|(&c, &s| c * s as i64))
+                                // 결과를 더한 다음 비트를 우측으로 쉬프트
+                                .sum::<i64> >> qlp_shift;
+  let delta = buffer[i];
+  buffet[i] = prediction as i32 + delta;
+}
+```
+
+- 이 코드가 컴파일되면, 12번의 반복이 있다는 것을 알고 있으므로 실제 코드에서 루프를 생성하지 않음
+- 루프를 풀어(`unrolls`) 놓음
+
+> 언롤링(`unrolling`): 루프 제어 코드의 오버헤드를 제거하고 대신 루프의 각 순회에 해당하는 반복되는 코드를 생성하는 최적화 방법
+
+- 모든 계수는 레지스터에 저장되어 값에 대한 접근 속도가 매우 빠르며, 런타임에 배열 접근에 대한 경계 검사가 없음
+- `Rust`의 이러한 최적화들은 결과적으로 코드를 매우 효율적음로 만듬
+- 따라서 반복자와 클로저를 마음대로 사용해도 런타임 성능에 불이익을 주지 않음

@@ -27,6 +27,17 @@ opt-level = 3
 - `opt-level` 설정: `Rust` 컴파일러가 코드에 적용할 최적화 수치(0~3)
   - 높은 최적화 수치는 컴파일 시간 증가 = 릴리즈
   - 낮은 최적화 수치는 컴파일 시간 감소 = 개발
+- `opt-level`을 설정할 경우, `dev` 프로필에서 `optimized`를 표시하거나, `release` 프로필에서 `unoptimized`가 표시될 수 있음
+
+```bash
+$ cargo build
+   Compiling createio v0.1.0 (C:\Users\ghooz\sources\Rust\handbook-rust\14_createio)
+    Finished `dev` profile [optimized + debuginfo] target(s) in 0.31s
+
+$ cargo build --release
+   Compiling createio v0.1.0 (C:\Users\ghooz\sources\Rust\handbook-rust\14_createio)
+    Finished `release` profile [unoptimized] target(s) in 0.23s
+```
 
 > [카고 공식 문서](https://doc.rust-lang.org/cargo/reference/profiles.html)
 
